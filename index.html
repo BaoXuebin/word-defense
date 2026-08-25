@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>星际打字防线 · Word Defense</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="labels"></div>
+  <div id="meaning"></div>
+
+  <!-- 左侧：当前波次 / 即将来袭 -->
+  <aside id="wave-panel" class="hidden">
+    <div class="wp-title"><span id="wp-label">即将来袭</span> · <b id="wp-num">1</b></div>
+    <div id="wp-list"></div>
+  </aside>
+
+  <div id="hud" class="hidden">
+    <div><span class="hud-score" id="hud-score">0</span><span class="hud-label">得分 SCORE</span></div>
+    <div id="hud-combo"></div>
+    <div class="hud-right">
+      <span id="hud-time">0:00</span>
+      <span id="hud-lives">♥♥♥</span>
+      <button id="btn-view" title="切换视角">视角</button>
+      <button id="btn-sound" title="音效开关">♪</button>
+    </div>
+  </div>
+
+  <div id="focus-hint" class="hidden">点 击 屏 幕 继 续 输 入</div>
+  <div id="toast" class="hidden"></div>
+  <div id="countdown"></div>
+
+  <!-- ===== 开始屏 ===== -->
+  <section id="screen-start" class="screen">
+    <div class="caps">Word Defense</div>
+    <h1 id="title">星际<em>打字</em>防线</h1>
+    <p class="tagline">陨石正砸向地球基地 · 敲下单词 · 守住最后防线</p>
+    <p class="best hidden" id="best-line">历史最佳 <b id="best-score">0</b> 分</p>
+    <button class="btn" id="btn-start">开始防御</button>
+    <p class="howto">电脑直接敲击键盘 / 手机点击屏幕唤起键盘<br>打错会断连击 · 陨石落地损失生命 ×3<br>传说连击 16 段会进入狂暴模式……</p>
+    <details>
+      <summary>自定义词库 · CUSTOM</summary>
+      <div class="lib-body">
+        <div class="lib-status" id="lib-status"></div>
+        <textarea id="lib-text" placeholder="把单词粘贴到这里，用空格 / 换行 / 逗号分隔，例如：&#10;apple banana cloud dragon ..."></textarea>
+        <div class="lib-actions">
+          <button class="btn" id="lib-save">保存并使用</button>
+          <button class="btn ghost" id="lib-reset">恢复默认</button>
+          <label class="lib-file">导入 .txt 词库文件<input type="file" id="lib-file" accept=".txt,.csv,text/plain" hidden></label>
+        </div>
+        <p class="lib-note">附赠的四级 / 六级核心词 .txt 可直接导入。词库保存在本机浏览器，下次打开自动生效。</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===== 结算屏 ===== -->
+  <section id="screen-over" class="screen hidden">
+    <h2>防 线 告 破</h2>
+    <div class="rank" id="over-rank">太空菜鸟</div>
+    <div class="record hidden" id="over-record">新 纪 录 NEW RECORD</div>
+    <div class="egg-line hidden" id="over-egg">✦ 发现彩蛋 × <b id="st-egg">0</b> ✦</div>
+    <div class="stats">
+      <div class="stat"><b id="st-score">0</b><span>总分</span></div>
+      <div class="stat"><b id="st-kill">0</b><span>击毁</span></div>
+      <div class="stat"><b id="st-combo">0</b><span>最大连击</span></div>
+      <div class="stat"><b id="st-wpm">0</b><span>WPM</span></div>
+      <div class="stat"><b id="st-acc">0%</b><span>正确率</span></div>
+      <div class="stat"><b id="st-time">0:00</b><span>坚持</span></div>
+    </div>
+    <img id="card-preview" alt="战绩卡">
+    <div class="btn-row">
+      <button class="btn amber" id="btn-card">保存战绩卡</button>
+      <button class="btn" id="btn-retry">再来一局</button>
+      <button class="btn ghost" id="btn-home">返回基地</button>
+    </div>
+  </section>
+
+  <input id="typer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="打字输入">
+  <canvas id="card-canvas" width="900" height="1200" style="position:absolute;left:-9999px;top:0"></canvas>
+</div>
+
+<!-- 经典 script 标签按序加载，保证 file:// 双击直开（ES module 在 file:// 下会被浏览器拦截） -->
+<script src="js/vendor/three.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/earth-texture.js"></script>
+<script src="js/ship-texture.js"></script>
+<script src="js/words.js"></script>
+<script src="js/dict.js"></script>
+<script src="js/dict-builtin.js"></script>
+<script src="js/dict-cet4.js"></script>
+<script src="js/dict-cet6.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/card.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# 大体积源文件（非运行所需）
+assets/MetalPlates003.zip
+
+# 系统 / 编辑器
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/

@@ -93,30 +93,6 @@ body.overdrive #vignette{animation:odPulse .9s ease-in-out infinite}
   100%{opacity:0;transform:translate(-50%,-50%) scale(.9)}
 }
 
-/* ===== 左侧：下一波预告 ===== */
-#wave-panel{
-  position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:18;
-  padding:12px 14px;min-width:150px;max-width:220px;
-  border:1px solid rgba(83,245,255,.22);border-radius:8px;
-  background:var(--panel);pointer-events:none;
-}
-.wp-title{font-size:11px;color:var(--dim);letter-spacing:.22em;margin-bottom:9px}
-.wp-title b{color:var(--cyan);font-size:13px}
-.wp-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px}
-.wp-row i{
-  flex:none;border-radius:50%;
-  background:radial-gradient(circle at 32% 30%,#8f9ab5,#4a5266 62%,#333a4c);
-  box-shadow:inset -2px -3px 4px rgba(0,0,0,.55),0 0 6px rgba(83,245,255,.12);
-}
-.wp-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wp-row b{margin-left:auto;padding-left:6px;color:var(--amber);font-weight:700;font-size:11px}
-.wp-empty{padding:6px 0;font-size:11px;color:#4a5160;letter-spacing:.2em;text-align:center}
-.wp-row.gold span{color:#ffd65a}
-.wp-row.gold i{
-  background:radial-gradient(circle at 32% 30%,#ffe08a,#a97d1e 62%,#6b4c0d);
-  box-shadow:inset -2px -3px 4px rgba(0,0,0,.5),0 0 8px rgba(255,180,84,.35);
-}
-
 /* ===== 3D 场景叠加层：单词标签 / 浮字 / 中文释义 ===== */
 #labels{position:absolute;inset:0;pointer-events:none;z-index:12;overflow:hidden}
 .word-label{

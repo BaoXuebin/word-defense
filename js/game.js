@@ -7,7 +7,6 @@ const typer = $('typer');
 const hud = $('hud'), focusHint = $('focus-hint');
 const screenStart = $('screen-start'), screenOver = $('screen-over');
 const labelsLayer = $('labels'), meaningEl = $('meaning'), cdEl = $('countdown');
-const wavePanel = $('wave-panel');
 
 /* ---------- 游戏状态 ---------- */
 const S = {
@@ -17,15 +16,13 @@ const S = {
   destroyed: 0, correctChars: 0, keystrokes: 0, mistakes: 0,
   eggs: 0, overdrive: false,
   rainbow: false,
-  elapsed: 0, shake: 0, cd: 0,
-  wave: 0, waveRest: 0, spawnAcc: 0,
-  queue: [], nextWave: [], waveList: [], wid: 0,
+  elapsed: 0, spawnAcc: 0, shake: 0, cd: 0,
   enemies: [],
   target: null, words: [], wordIdx: 0, lastTs: performance.now()
 };
 try{ S.rainbow = localStorage.getItem('wd_rainbow') === '1'; }catch(e){}
 
-const multiplier = () => 1 + Math.min(7, Math.floor(S.combo / 4));
+const multiplier = () => 1 + Math.min(7, Math.floor(S.combo / 3));
 
 /* ---------- 开局倒计时 3 · 2 · 1 · GO ---------- */
 let cdTimer = null;
@@ -60,14 +57,10 @@ function resetGame(){
     score: 0, lives: 3, combo: 0, maxCombo: 0,
     destroyed: 0, correctChars: 0, keystrokes: 0, mistakes: 0,
     eggs: 0, overdrive: false,
-    elapsed: 0, shake: 0,
-    wave: 0, waveRest: 1100, spawnAcc: 0, resting: true, wid: 0,
-    queue: [], nextWave: [], waveList: [],
+    elapsed: 0, spawnAcc: 1500, shake: 0,
     enemies: [], target: null,
     words: shuffled(getWords().list), wordIdx: 0
   });
-  stageWave();
-  renderWavePanel(1, S.nextWave, true);   // 倒计时/休整期：预告即将来袭的第 1 波
   labelsLayer.innerHTML = '';
   document.body.classList.remove('overdrive');
   $('hud-score').textContent = '0';
@@ -89,78 +82,29 @@ function norm3(v){
   return {x: v.x / l, y: v.y / l, z: v.z / l};
 }
 
-/* ---------- 波次 ---------- */
-// 生成第 n 波的陨石清单（预生成，供左侧面板展示与逐颗销账）
-function makeWave(n){
-  const count = Math.min(CONFIG.WAVE_MAX, CONFIG.WAVE_BASE + (n - 1) * CONFIG.WAVE_ADD);
-  const arr = [];
-  for (let i = 0; i < count; i++){
-    if (S.elapsed > 10000 && Math.random() < CONFIG.EGG_CHANCE)
-      arr.push({id: ++S.wid, w: EGG_WORDS[Math.floor(Math.random() * EGG_WORDS.length)], gold: true});
-    else
-      arr.push({id: ++S.wid, w: nextWord(), gold: false});
+function spawnEnemy(){
+  let word, gold = false;
+  // 彩蛋陨石：金色、词来自 EGG_WORDS
+  if (S.elapsed > 10000 && Math.random() < CONFIG.EGG_CHANCE){
+    word = EGG_WORDS[Math.floor(Math.random() * EGG_WORDS.length)];
+    gold = true;
+  } else {
+    word = nextWord();
   }
-  return arr;
-}
-// 预生成下一波（仅数据；左侧面板在合适时机刷新）
-function stageWave(){
-  S.nextWave = makeWave(S.wave + 1);
-}
-// 当前波清空休整结束后调用：预告转正为进攻队列，左侧切换为「当前波次」
-function beginWave(){
-  S.wave++;
-  S.waveList = S.nextWave;
-  S.queue = S.waveList.slice();
-  S.spawnAcc = 0;
-  S.resting = false;
-  stageWave();
-  renderWavePanel(S.wave, S.waveList, false);
-  showToast(`第 ${S.wave} 波来袭`);
-}
-// 陨石离场（击毁 / 落地 / 掠过）后销账，并同步左侧面板
-function settleWaveItem(e){
-  if (!e._item || e._item.done) return;
-  e._item.done = true;
-  if (!S.resting) renderWavePanel(S.wave, S.waveList, false);
-}
-// 左侧面板：incoming=true 显示「即将来袭」（休整/倒计时期），否则显示「当前波次」
-// 当前波次模式下，已消灭的陨石实时从清单中去除
-function renderWavePanel(no, list, incoming){
-  $('wp-label').textContent = incoming ? '即将来袭' : '当前波次';
-  $('wp-num').textContent = no;
-  const groups = new Map();
-  for (const it of list){
-    if (it.done) continue;
-    const g = groups.get(it.w) || {n: 0, gold: it.gold};
-    g.n++;
-    groups.set(it.w, g);
-  }
-  const rows = [...groups.entries()]
-    .sort((a, b) => b[0].length - a[0].length)
-    .map(([w, g]) => {
-      const d = 7 + Math.min(23, w.length * 2);
-      return `<div class="wp-row${g.gold ? ' gold' : ''}">` +
-        `<i style="width:${d}px;height:${d}px"></i><span>${w}</span>` +
-        (g.n > 1 ? `<b>×${g.n}</b>` : '') + '</div>';
-    });
-  $('wp-list').innerHTML = rows.length ? rows.join('') : '<div class="wp-empty">本 波 已 肃 清</div>';
-}
-
-function spawnEnemy(item){
-  const word = item.w, gold = !!item.gold;
   // 佯攻陨石：开局 8 秒后按比例混入，轨迹与地球擦肩而过、无伤飞离
   const miss = S.elapsed > 8000 && Math.random() < CONFIG.MISS_CHANCE;
-  // 世界速度：随波次提升，逻辑速度缩放为世界单位/秒
-  const speed = Math.min(CONFIG.SPEED_MAX, CONFIG.SPEED_BASE + (S.wave - 1) * CONFIG.WAVE_SPEED_RAMP) * .1;
+  // 世界速度：随得分线性提升，逻辑速度缩放为世界单位/秒
+  const speed = Math.min(CONFIG.SPEED_MAX, CONFIG.SPEED_BASE + S.score * CONFIG.SPEED_RAMP) * .1;
   const E = Scene3D.EARTH;
   // 落点：地球朝向镜头半球面上的随机点（玩家能看到撞击面）
   const u = norm3({x: rand(-1, 1), y: rand(-.1, 1), z: rand(.45, 1)});
   const aim = {x: E.x + u.x * E.r, y: E.y + u.y * E.r, z: E.z + u.z * E.r};
   // 起点：从地球外侧深空（更高、更远、横向散开），z 恒在镜头前方很远处
+  // 距离下限约 50 单位——保证陨石飞抵地球前留出至少一个单词的输入时间
   const start = {
-    x: aim.x + rand(-70, 70),
-    y: Math.min(aim.y + rand(38, 72), 52),
-    z: E.z - rand(8, 42)
+    x: aim.x + rand(-75, 75),
+    y: Math.min(aim.y + rand(45, 82), 56),
+    z: E.z - rand(22, 55)
   };
   let target = aim;
   if (miss){
@@ -185,7 +129,6 @@ function spawnEnemy(item){
   const dist = Math.hypot(target.x - start.x, target.y - start.y, target.z - start.z);
   S.enemies.push({
     word, gold, miss, typed: 0, errT: 0, hitT: 0,
-    _item: item,                  // 对应波次清单条目，离场时销账
     p: 0, start, target, pos: Object.assign({}, start), dist,
     spd: speed * (.92 + Math.random() * .16),   // 波内速度波动收窄，手感更线性
     wr: 14 + word.length * 3.2,   // 单词越长陨石越大（整体已放大）
@@ -250,11 +193,10 @@ function registerMistake(){
 }
 function destroyEnemy(e){
   e.dead = true;
-  settleWaveItem(e);
   S.combo++;
   S.maxCombo = Math.max(S.maxCombo, S.combo);
   S.destroyed++;
-  let gained = e.word.length * 10 * multiplier();
+  let gained = e.word.length * 15 * multiplier();
   const pos = e._scr || {x: window.innerWidth / 2, y: window.innerHeight / 2};
   addFloater(pos.x, pos.y, '+' + gained, '#53f5ff');
   if (e.gold){  // 彩蛋陨石：额外加分 + 特殊提示
@@ -321,7 +263,6 @@ typer.addEventListener('input', () => {
 /* ---------- 生命 / 结束 ---------- */
 function loseLife(e){
   e.dead = true;
-  settleWaveItem(e);
   if (S.target === e) S.target = null;
   Scene3D.explode(e, 0xff5d5d);
   S.lives--;
@@ -337,12 +278,12 @@ function loseLife(e){
 }
 
 function rankOf(score){
-  if (score === 0)   return '和平主义者';   // 彩蛋：一分未得
-  if (score < 600)   return '太空菜鸟';
-  if (score < 1500)  return '见习炮手';
-  if (score < 3000)  return '轨道卫士';
-  if (score < 5500)  return '王牌飞行员';
-  if (score < 9000)  return '星际指挥官';
+  if (score === 0)     return '和平主义者';   // 彩蛋：一分未得
+  if (score < 850)     return '太空菜鸟';
+  if (score < 2100)    return '见习炮手';
+  if (score < 4300)    return '轨道卫士';
+  if (score < 7800)    return '王牌飞行员';
+  if (score < 12800)   return '星际指挥官';
   return '银河传说';
 }
 function fmtTime(ms){
@@ -385,7 +326,6 @@ function gameOver(){
   $('st-time').textContent = stats.time;
   drawCard(stats);
   hud.classList.add('hidden');
-  wavePanel.classList.add('hidden');
   focusHint.classList.add('hidden');
   screenOver.classList.remove('hidden');
 }
@@ -401,22 +341,12 @@ function update(dt){
     $('hud-combo').classList.toggle('flash', od);
     if (od){ showToast('OVERDRIVE · 狂暴模式'); arpeggio(); }
   }
-  // 波次推进：波内按小间隔逐颗出场；全清后休整，倒计时结束进入下一波
-  if (S.queue.length){
-    S.spawnAcc += dt * 1000;
-    // 波内出场间隔随波次线性缩短：高波次近乎齐射
-    const trickle = Math.max(CONFIG.WAVE_TRICKLE_MIN, CONFIG.WAVE_TRICKLE - S.wave * CONFIG.WAVE_TRICKLE_RAMP);
-    if (S.spawnAcc >= trickle){ S.spawnAcc = 0; spawnEnemy(S.queue.shift()); }
-  } else if (!S.enemies.length){
-    if (!S.resting){   // 刚清场：面板切回「即将来袭」预览下一波
-      S.resting = true;
-      renderWavePanel(S.wave + 1, S.nextWave, true);
-    }
-    S.waveRest -= dt * 1000;
-    if (S.waveRest <= 0){
-      S.waveRest = Math.max(CONFIG.WAVE_REST_MIN, CONFIG.WAVE_REST - S.wave * CONFIG.WAVE_REST_RAMP);
-      beginWave();
-    }
+  // 出怪：间隔随得分线性缩短（打得越好来得越快），同屏数量设上限
+  S.spawnAcc += dt * 1000;
+  const interval = Math.max(CONFIG.SPAWN_MIN, CONFIG.SPAWN_START - S.score * CONFIG.SPAWN_RAMP);
+  if (S.spawnAcc >= interval && S.enemies.length < CONFIG.MAX_ENEMIES){
+    S.spawnAcc = 0;
+    spawnEnemy();
   }
   // 陨石逼近地球
   for (const e of S.enemies){
@@ -429,7 +359,6 @@ function update(dt){
     if (e.p >= 1){
       if (e.miss){   // 佯攻陨石：掠过地球，无伤飞出
         e.dead = true;
-        settleWaveItem(e);
         if (S.target === e) S.target = null;
         if (e._scr) addFloater(e._scr.x, e._scr.y, '佯攻 · 掠过', '#7d8797');
       } else {
@@ -500,7 +429,6 @@ function startGame(){
   screenStart.classList.add('hidden');
   screenOver.classList.add('hidden');
   hud.classList.remove('hidden');
-  wavePanel.classList.remove('hidden');
   focusHint.classList.add('hidden');
   typer.value = '';
   typer.focus();

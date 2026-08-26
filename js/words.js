@@ -30,6 +30,22 @@ fleet cloud storm thunder rain wind flame frost spark ember stone iron steel cop
 shadow light dream magic sword arrow shield brave swift quiet proud noble ancient future
 `).split(/\s+/).filter(Boolean);
 
+/* ---------- 内置四级 / 六级核心词库 ----------
+   与 wordlists/cet4-core.txt / cet6-core.txt 保持一致，
+   供「自定义词库」面板一键选择（file:// 下无法 fetch 本地 txt）。 */
+const CET4_WORDS = (`abandon ability abroad absolute absorb abstract abuse academic accelerate access accident accompany accomplish account accurate accuse achieve acquire adapt additional adequate adjust admire admit adopt advance advantage adventure advertise advise advocate affair affect afford agency aggressive agriculture alarm alcohol alert alternative amateur amaze ambition amount amuse analyze ancient anniversary announce annual anxious apologize apparent appeal appearance apply appoint appreciate approach appropriate approve argue arise arrange artificial ashamed assign assist associate assume assure athlete atmosphere attach attack attempt attend attitude attract authority automatic available average avoid award aware awful awkward background balance barely barrier basis battery behave behalf belief benefit besides blame blanket block border bother bound brand brave breathe brief brilliant budget burden burst campaign cancel candidate capable career careless casual celebrate ceremony challenge channel character charity charm chase cheerful chemical chief circumstance citizen civilization claim climate clue clumsy coach combine comfort command comment commerce commit communicate community compare compete complain complete complex compose concentrate concern conclude condition conduct confident confirm conflict confuse congratulate connect conscious consequence consider consist constant construct consult consume contact contain content contest continent continue contract contrary contrast contribute control convenient convince cooperate corporation correspond courage crash create credit crew crime crisis critic crop crowd cruel culture curious current custom damage decade declare decline decorate decrease defeat defend define degree delay delicate deliver demand democracy demonstrate deny depart depend deposit depress describe desert deserve design desire despite destination destroy detail detect determine develop device devote differ digest digital disaster discipline discount discover disease dismiss display distance distinct distinguish distribute district disturb diverse divorce domestic draft
+`).split(/\s+/).filter(Boolean);
+
+const CET6_WORDS = (`abolish absurd abundance accessory accommodate accordance acquaint adhere adjacent administer adolescent adversity aesthetic affiliate aggravate aggregate alleviate ambiguous ambitious amend ample analogy anonymous apparatus appraise arbitrary articulate ascend ascertain aspiration assault assert assimilate authorize autonomous avert aviation bleak blunder boost boycott breach brittle casualty catastrophe census chronic circulation cite coalition coincide collaborate collide commend commodity commonplace compensate compile complement complexity comply component comprehend compulsory conceive confer confidential conform consensus consolidate conspicuous constituent constrain contaminate contemplate contempt contend contradictory convene converge corrupt counsel crucial cumulative cynical dedicate deem defiance deficit degenerate deliberate denote denounce deprive derive designate deteriorate diagnose diffuse dilemma diminish discreet discrepancy discrete dispatch disperse distort divert domain dominate drastic dwell eligible eloquent embark embody eminent empirical endeavor endorse endure energetic enrich ensue entail enterprise entity envisage epidemic epoch equivalent erosion essence eternal ethnic evoke exaggerate exceed excel exempt exile exotic expel expire explicit exploit exquisite extinct extract extravagant fabricate facilitate feasible federal feeble flank fling fluctuate formidable fortitude foster fragile fraud friction fulfill furious futile gauge generate genuine glamour glimpse gloomy grace grant grief grim guarantee hamper harness haste haunt hazard heir heritage hierarchy hinder homogeneous hospitality hostage humble hybrid hygiene hypothesis identical ideology ignite ignorance illuminate illusion immerse immune impair impart imperative impetus implement implicit impose incentive incidence inclined indignant indispensable induce infer ingenious inherent inhibit initiate innovation insight inspire integral integrity intellect intelligible intense interact interim intermittent intervene intimate intricate intrinsic intuition inventory invert jeopardize junction latent legitimate liable linger literacy literal lobby lofty luminous lure magnetic magnify magnitude manifest manipulate manuscript margin mediate medieval merchandise merge metaphor migrate militant mingle miniature minimal minimize mock monopoly morale mortal mortgage municipal naive narrate negligible nominal nominate norm notable notify notion notorious nourish novelty nuisance nurture obedient obscure obsession obstruct occupy odds offense offset opaque optimistic orient outbreak outlet outrage overlap overlook overt overthrow overwhelm
+`).split(/\s+/).filter(Boolean);
+
+// 内置词库预设：通用 / 四级核心词 / 六级核心词
+const LIB_PRESETS = {
+  general: {key: 'general', name: '内置通用', words: DEFAULT_WORDS},
+  cet4:    {key: 'cet4',    name: '四级核心词', words: CET4_WORDS},
+  cet6:    {key: 'cet6',    name: '六级核心词', words: CET6_WORDS},
+};
+
 // 从任意文本提取有效单词（去重、2-20 个字符）
 function parseWords(text){
   const seen = new Set();
@@ -37,6 +53,19 @@ function parseWords(text){
     if (w.length >= 2 && w.length <= 20 && /[a-z]/.test(w)) seen.add(w);
   }
   return [...seen];
+}
+
+// 当前内置词库预设键（general | cet4 | cet6）
+function getPreset(){
+  try{
+    const p = localStorage.getItem('wd_lib_preset');
+    if (p && LIB_PRESETS[p]) return p;
+  }catch(e){}
+  return 'general';
+}
+
+function setPreset(key){
+  try{ localStorage.setItem('wd_lib_preset', LIB_PRESETS[key] ? key : 'general'); }catch(e){}
 }
 
 // 读取当前词库：优先用户自定义，否则内置通用
@@ -48,7 +77,8 @@ function getWords(){
       if (Array.isArray(arr) && arr.length >= 5) return {list: arr, custom: true};
     }
   }catch(e){}
-  return {list: DEFAULT_WORDS, custom: false};
+  const lib = LIB_PRESETS[getPreset()] || LIB_PRESETS.general;
+  return {list: lib.words, custom: false, preset: lib.key};
 }
 
 function saveWords(arr){

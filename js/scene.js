@@ -352,7 +352,7 @@ const Scene3D = (() => {
     } else if (target === e){
       m.material.emissive.setHex(0x0a3a44);
       m.material.emissiveIntensity = 1;
-    } else if (!e.miss && e.p > .78){   // 真实威胁逼近地球警戒：红色脉冲（佯攻不触发）
+    } else if (e.p > .78){   // 逼近地球警戒：红色脉冲
       m.material.emissive.setHex(0x551111);
       m.material.emissiveIntensity = .6 + Math.abs(Math.sin(t * 9)) * .8;
     } else {

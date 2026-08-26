@@ -10,19 +10,29 @@ const labelsLayer = $('labels'), meaningEl = $('meaning'), cdEl = $('countdown')
 
 /* ---------- 游戏状态 ---------- */
 const S = {
-  running: false, phase: 'idle',   // idle | countdown | play
+  running: false, phase: 'idle',   // idle | countdown | play | ending
   sound: true,
   score: 0, lives: 3, combo: 0, maxCombo: 0,
   destroyed: 0, correctChars: 0, keystrokes: 0, mistakes: 0,
   eggs: 0, overdrive: false,
   rainbow: false,
   elapsed: 0, spawnAcc: 0, shake: 0, cd: 0,
+  spawnCount: 0,
+  timescale: 1, endingWin: false, endingT: 0,
   enemies: [],
   target: null, words: [], wordIdx: 0, lastTs: performance.now()
 };
 try{ S.rainbow = localStorage.getItem('wd_rainbow') === '1'; }catch(e){}
+try{ S.diffIdx = Math.min(CONFIG.DIFFS.length - 1, Math.max(0, parseInt(localStorage.getItem('wd_diff') || '0', 10) || 0)); }catch(e){ S.diffIdx = 0; }
+let hellUnlocked = false;   // 地狱难度：在「终极」获胜后解锁
+try{ hellUnlocked = localStorage.getItem('wd_hell') === '1'; }catch(e){}
 
 const multiplier = () => 1 + Math.min(7, Math.floor(S.combo / 3));
+
+/* ---------- GA 埋点（未配置 GA_ID 时静默） ---------- */
+function track(event, params){
+  if (typeof window.gtag === 'function') window.gtag('event', event, params || {});
+}
 
 /* ---------- 开局倒计时 3 · 2 · 1 · GO ---------- */
 let cdTimer = null;
@@ -36,7 +46,12 @@ function runCountdown(){
   const seq = ['3', '2', '1', 'GO'];
   let i = 0;
   const step = () => {
-    if (i >= seq.length){ S.phase = 'play'; return; }
+    if (i >= seq.length){
+      S.phase = 'play';
+      showToast(CONFIG.DIFFS[S.diffIdx].name + '难度 · 拦截开始');
+      track('game_start', { difficulty: CONFIG.DIFFS[S.diffIdx].name });
+      return;
+    }
     const s = seq[i++];
     cdEl.textContent = s;
     cdEl.classList.toggle('go', s === 'GO');
@@ -54,10 +69,14 @@ function resetGame(){
   S.phase = 'idle';
   for (const e of S.enemies) freeEnemy(e);
   Object.assign(S, {
-    score: 0, lives: 3, combo: 0, maxCombo: 0,
+    score: 0, lives: CONFIG.LIVES, combo: 0, maxCombo: 0,
     destroyed: 0, correctChars: 0, keystrokes: 0, mistakes: 0,
     eggs: 0, overdrive: false,
-    elapsed: 0, spawnAcc: 1500, shake: 0,
+    elapsed: 0, shake: 0,
+    spawnCount: 0,
+    timescale: 1, endingWin: false, endingT: 0,
+    /* 预填出怪累计：GO 后约 0.6s 第一颗陨石即刻现身 */
+    spawnAcc: Math.max(0, CONFIG.DIFFS[S.diffIdx].I0 - 600),
     enemies: [], target: null,
     words: shuffled(getWords().list), wordIdx: 0
   });
@@ -66,8 +85,9 @@ function resetGame(){
   $('hud-score').textContent = '0';
   $('hud-combo').textContent = '';
   $('hud-combo').classList.remove('flash');
-  $('hud-lives').textContent = '♥'.repeat(CONFIG.LIVES);
+  $('hud-lives').textContent = '♥'.repeat(Math.max(0, CONFIG.LIVES)) || '—';
   $('hud-time').textContent = '0:00';
+  updateGoalHud();
 }
 
 function nextWord(){
@@ -91,46 +111,31 @@ function spawnEnemy(){
   } else {
     word = nextWord();
   }
-  // 佯攻陨石：开局 8 秒后按比例混入，轨迹与地球擦肩而过、无伤飞离
-  const miss = S.elapsed > 8000 && Math.random() < CONFIG.MISS_CHANCE;
-  // 世界速度：随得分线性提升，逻辑速度缩放为世界单位/秒
-  const speed = Math.min(CONFIG.SPEED_MAX, CONFIG.SPEED_BASE + S.score * CONFIG.SPEED_RAMP) * .1;
+  // 世界速度：随对局进行线性提升（与难度档位无关），逻辑速度缩放为世界单位/秒
+  const k = Math.min(1, S.elapsed / CONFIG.RUN_MS);
+  const speed = (CONFIG.SPEED_BASE + (CONFIG.SPEED_MAX - CONFIG.SPEED_BASE) * k) * .1;
   const E = Scene3D.EARTH;
-  // 落点：地球朝向镜头半球面上的随机点（玩家能看到撞击面）
+  // 落点：地球朝向镜头半球面上的随机点——每颗陨石都必然冲向地球
   const u = norm3({x: rand(-1, 1), y: rand(-.1, 1), z: rand(.45, 1)});
-  const aim = {x: E.x + u.x * E.r, y: E.y + u.y * E.r, z: E.z + u.z * E.r};
-  // 起点：从地球外侧深空（更高、更远、横向散开），z 恒在镜头前方很远处
-  // 距离下限约 50 单位——保证陨石飞抵地球前留出至少一个单词的输入时间
+  const target = {x: E.x + u.x * E.r, y: E.y + u.y * E.r, z: E.z + u.z * E.r};
+  // 距离按「基准速度 × 飞行时长」反推（8~12s），实际速度再乘个体系数——
+  // 快慢不一的同屏陨石，最快的也保留约 6s 反应窗口，不会出现必死球
+  const off = norm3({
+    x: rand(-75, 75),
+    y: Math.min(rand(45, 82), 56) - target.y,
+    z: E.z - rand(22, 55) - target.z
+  });
+  const dist = Math.min(200, speed * rand(8, 12));
+  const spd = speed * rand(.75, 1.35);
   const start = {
-    x: aim.x + rand(-75, 75),
-    y: Math.min(aim.y + rand(45, 82), 56),
-    z: E.z - rand(22, 55)
+    x: target.x + off.x * dist,
+    y: target.y + off.y * dist,
+    z: Math.min(target.z + off.z * dist, -30)
   };
-  let target = aim;
-  if (miss){
-    // 把直线从「指向地心」向随机侧向偏转 δ：最近距离 = 瞄准参数 b > 地球半径，
-    // 于是与地球擦肩而过，越过最近点后继续冲出视野
-    const w = {x: E.x - start.x, y: E.y - start.y, z: E.z - start.z};
-    const L = Math.hypot(w.x, w.y, w.z) || 1;
-    const d0 = {x: w.x / L, y: w.y / L, z: w.z / L};
-    let n = {x: rand(-1, 1), y: rand(-1, 1), z: rand(-1, 1)};   // 任取侧向
-    const k0 = n.x * d0.x + n.y * d0.y + n.z * d0.z;            // 去掉平行分量 → 垂直
-    n = {x: n.x - k0 * d0.x, y: n.y - k0 * d0.y, z: n.z - k0 * d0.z};
-    let nl = Math.hypot(n.x, n.y, n.z);
-    if (nl < .01){ n = {x: -d0.z, y: 0, z: d0.x}; nl = Math.hypot(n.x, n.y, n.z) || 1; }
-    n = {x: n.x / nl, y: n.y / nl, z: n.z / nl};
-    const b = E.r * rand(1.25, 2.15);            // 最近距离（离地心）
-    const dl = Math.asin(Math.min(.95, b / L));  // 偏转角
-    const cs = Math.cos(dl), sn = Math.sin(dl);
-    const dir = norm3({x: d0.x * cs + n.x * sn, y: d0.y * cs + n.y * sn, z: d0.z * cs + n.z * sn});
-    const past = L * cs + rand(45, 75);
-    target = {x: start.x + dir.x * past, y: start.y + dir.y * past, z: start.z + dir.z * past};
-  }
-  const dist = Math.hypot(target.x - start.x, target.y - start.y, target.z - start.z);
   S.enemies.push({
-    word, gold, miss, typed: 0, errT: 0, hitT: 0,
+    word, gold, typed: 0, errT: 0, hitT: 0,
     p: 0, start, target, pos: Object.assign({}, start), dist,
-    spd: speed * (.92 + Math.random() * .16),   // 波内速度波动收窄，手感更线性
+    spd,
     wr: 14 + word.length * 3.2,   // 单词越长陨石越大（整体已放大）
     rot: Math.random() * 6.28,
     seed: Array.from({length: 9}, () => .72 + Math.random() * .5),
@@ -259,6 +264,14 @@ typer.addEventListener('input', () => {
   if (!S.running || S.phase !== 'play' || !v) return;
   for (const ch of v) processChar(ch);
 });
+/* ESC：放弃当前输入进度，解除锁定以便切换目标 */
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !S.running || S.phase !== 'play' || !S.target) return;
+  S.target.typed = 0;
+  S.target._labelKey = '';   // 强制刷新单词标签
+  S.target = null;
+  blip(300, .08, 'square', .03);
+});
 
 /* ---------- 生命 / 结束 ---------- */
 function loseLife(e){
@@ -274,16 +287,16 @@ function loseLife(e){
   boomSound();
   document.body.style.background = '#2a0d14';
   setTimeout(() => document.body.style.background = '', 130);
-  if (S.lives <= 0) gameOver();
+  if (S.lives <= 0) beginEnding(false);
 }
 
 function rankOf(score){
   if (score === 0)     return '和平主义者';   // 彩蛋：一分未得
-  if (score < 850)     return '太空菜鸟';
-  if (score < 2100)    return '见习炮手';
-  if (score < 4300)    return '轨道卫士';
-  if (score < 7800)    return '王牌飞行员';
-  if (score < 12800)   return '星际指挥官';
+  if (score < 2000)    return '太空菜鸟';
+  if (score < 6500)    return '见习炮手';
+  if (score < 13000)   return '轨道卫士';
+  if (score < 21000)   return '王牌飞行员';
+  if (score < 30000)   return '星际指挥官';
   return '银河传说';
 }
 function fmtTime(ms){
@@ -291,10 +304,38 @@ function fmtTime(ms){
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
-function gameOver(){
-  S.running = false;
+/* ---------- 结局：慢动作演出 → 结算页 ---------- */
+// 进入终局：胜利清场庆祝 / 失败红震，时间膨胀到子弹时间后弹出结算
+function beginEnding(win){
+  if (S.phase === 'ending') return;
+  S.phase = 'ending';
+  S.endingWin = win;
+  S.endingT = 0;
   stopCountdown();
   document.body.classList.remove('overdrive');
+  $('hud-combo').classList.remove('flash');
+  if (win){
+    for (const e of S.enemies)
+      if (!e.dead){ e.dead = true; Scene3D.explode(e, 0x8affc1); }
+    S.target = null;
+    meaningEl.classList.remove('gold');
+    meaningEl.textContent = '地 球 得 救 了';
+    meaningEl.classList.remove('show');
+    void meaningEl.offsetWidth;
+    meaningEl.classList.add('show');
+    arpeggio();
+    boomSound();
+  } else {
+    S.shake = 30;
+    blip(60, .6, 'sawtooth', .09);
+    boomSound();
+  }
+}
+function finishEnding(){
+  const win = S.endingWin;
+  S.running = false;
+  S.phase = 'idle';
+  S.timescale = 1;
   typer.blur();
   for (const e of S.enemies) freeEnemy(e);
   S.enemies = [];
@@ -311,9 +352,31 @@ function gameOver(){
     eggs: S.eggs
   };
   let best = 0;
-  try{ best = parseInt(localStorage.getItem('wd_best') || '0', 10) || 0; }catch(e){}
+  const bestKey = 'wd_best_' + S.diffIdx;   // 各难度独立记录
+  try{ best = parseInt(localStorage.getItem(bestKey) || '0', 10) || 0; }catch(e){}
   const isRecord = stats.score > best;
-  if (isRecord){ try{ localStorage.setItem('wd_best', String(stats.score)); }catch(e){} }
+  if (isRecord){ try{ localStorage.setItem(bestKey, String(stats.score)); }catch(e){} }
+  /* 在「终极」获胜 → 解锁地狱难度 */
+  if (win && S.diffIdx === CONFIG.DIFFS.length - 2 && !hellUnlocked){
+    hellUnlocked = true;
+    try{ localStorage.setItem('wd_hell', '1'); }catch(e){}
+    showToast('新难度解锁 · 地狱');
+    arpeggio();
+    track('hell_unlock');
+  }
+  track('game_end', {
+    difficulty: CONFIG.DIFFS[S.diffIdx].name,
+    result: win ? 'win' : 'lose',
+    score: S.score,
+    kills: S.destroyed,
+    duration_sec: Math.round(S.elapsed / 1000)
+  });
+  $('over-title').textContent = win ? '地 球 得 救 了' : '防 线 告 破';
+  $('over-title').classList.toggle('win', win);
+  const total = CONFIG.DIFFS[S.diffIdx].total;
+  $('over-sub').textContent = win
+    ? `${total} 枚陨石全部击碎 · 防线固若金汤`
+    : `击碎 ${S.destroyed} / ${total} 枚 · 地球等你再次出征`;
   $('over-rank').textContent = stats.rank;
   $('over-record').classList.toggle('hidden', !isRecord);
   $('over-egg').classList.toggle('hidden', stats.eggs <= 0);
@@ -341,12 +404,26 @@ function update(dt){
     $('hud-combo').classList.toggle('flash', od);
     if (od){ showToast('OVERDRIVE · 狂暴模式'); arpeggio(); }
   }
-  // 出怪：间隔随得分线性缩短（打得越好来得越快），同屏数量设上限
-  S.spawnAcc += dt * 1000;
-  const interval = Math.max(CONFIG.SPAWN_MIN, CONFIG.SPAWN_START - S.score * CONFIG.SPAWN_RAMP);
-  if (S.spawnAcc >= interval && S.enemies.length < CONFIG.MAX_ENEMIES){
-    S.spawnAcc = 0;
-    spawnEnemy();
+  /* 出怪：把本局固定配额按难度曲线铺满 3 分钟；
+     时间走到头，剩余配额作为「终局波」一次全部现身 */
+  const D = CONFIG.DIFFS[S.diffIdx];
+  if (S.phase === 'play' && S.spawnCount < D.total){
+    const k = Math.min(1, S.elapsed / CONFIG.RUN_MS);
+    const due = Math.floor(k * D.total);
+    if (k >= 1){
+      while (S.spawnCount < D.total){ S.spawnCount++; spawnEnemy(); }
+      showToast('终局波 · 陨石倾巢而出');
+      boomSound();
+    } else if (S.spawnCount < due){
+      S.spawnAcc += dt * 1000;
+      if (S.spawnAcc >= 280 && S.enemies.length < D.cap){
+        S.spawnAcc = 0;
+        S.spawnCount++;
+        spawnEnemy();
+      }
+    } else {
+      S.spawnAcc = 0;
+    }
   }
   // 陨石逼近地球
   for (const e of S.enemies){
@@ -357,13 +434,8 @@ function update(dt){
     e.pos.y = e.start.y + (e.target.y - e.start.y) * e.p;
     e.pos.z = e.start.z + (e.target.z - e.start.z) * e.p;
     if (e.p >= 1){
-      if (e.miss){   // 佯攻陨石：掠过地球，无伤飞出
-        e.dead = true;
-        if (S.target === e) S.target = null;
-        if (e._scr) addFloater(e._scr.x, e._scr.y, '佯攻 · 掠过', '#7d8797');
-      } else {
-        loseLife(e);
-      }
+      if (S.phase === 'ending'){ e.dead = true; }   // 慢动作演出中落地只作视觉效果
+      else loseLife(e);
     }
   }
   const dead = S.enemies.filter(e => e.dead);
@@ -372,6 +444,13 @@ function update(dt){
   S.shake = Math.max(0, S.shake - dt * 40);
   if (S.target && S.target.dead) S.target = null;
   $('hud-time').textContent = fmtTime(S.elapsed);
+  updateGoalHud();
+  /* 胜利：配额全部出现且已全部击碎 */
+  if (S.phase === 'play' && S.spawnCount >= D.total && !S.enemies.length) beginEnding(true);
+}
+function updateGoalHud(){
+  const D = CONFIG.DIFFS[S.diffIdx];
+  $('hud-goal').textContent = `${Math.min(S.destroyed, D.total)} / ${D.total}`;
 }
 
 /* ---------- DOM 单词标签 ---------- */
@@ -416,10 +495,20 @@ function frame(ts){
   requestAnimationFrame(frame);
   const dt = Math.min(.05, Math.max(0, (ts - S.lastTs) / 1000));
   S.lastTs = ts;
-  const playing = S.running && S.phase === 'play';
-  if (playing) update(dt);
-  Scene3D.render(dt, ts / 1000, S.running, S.shake, S.target, playing ? S.enemies : null);
-  if (playing) syncLabels();
+  if (S.running && S.phase === 'ending'){
+    /* 终局慢动作：时间膨胀到子弹时间，演出后弹出结算 */
+    S.timescale += (0.12 - S.timescale) * Math.min(1, dt * 2.4);
+    S.endingT += dt;
+    update(dt * S.timescale);
+    if (S.endingT > 2.4) finishEnding();
+  } else if (S.running && S.phase === 'play'){
+    S.timescale = 1;
+    update(dt);
+  }
+  const active = S.running && (S.phase === 'play' || S.phase === 'ending');
+  /* 暂停时给场景传 running=false → 相机呼吸/慢速星空待机 */
+  Scene3D.render(dt, ts / 1000, S.running && S.phase !== 'paused', S.shake, S.target, active ? S.enemies : null);
+  if (active) syncLabels();
 }
 
 /* ---------- 流程控制 ---------- */
@@ -444,8 +533,31 @@ $('btn-home').addEventListener('click', () => {
 document.addEventListener('pointerdown', () => {
   if (S.running && document.activeElement !== typer) typer.focus();
 });
-typer.addEventListener('blur', () => { if (S.running) focusHint.classList.remove('hidden'); });
-typer.addEventListener('focus', () => focusHint.classList.add('hidden'));
+/* ---------- 暂停 / 继续：失去输入焦点即暂停，回车恢复（重播倒计时） ---------- */
+function pauseGame(){
+  if (!S.running || (S.phase !== 'play' && S.phase !== 'countdown')) return;
+  stopCountdown();
+  S.phase = 'paused';
+  focusHint.textContent = '已 暂 停 · 按 回 车 继 续';
+  focusHint.classList.remove('hidden');
+}
+function resumeGame(){
+  if (!S.running || S.phase !== 'paused') return;
+  focusHint.classList.add('hidden');
+  if (document.activeElement !== typer) typer.focus();
+  runCountdown();   // 恢复前重播 3·2·1·GO
+}
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (S.running){ resumeGame(); return; }
+  /* 未开局时：回车快速进入游戏 */
+  if (!screenOver.classList.contains('hidden')){ $('btn-retry').click(); return; }
+  if (!screenStart.classList.contains('hidden')) startGame();
+});
+typer.addEventListener('blur', pauseGame);
+typer.addEventListener('focus', () => { if (S.phase !== 'paused') focusHint.classList.add('hidden'); });
+window.addEventListener('blur', pauseGame);   // 切走窗口同样暂停
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 $('btn-sound').addEventListener('click', e => {
   S.sound = !S.sound;
   e.target.classList.toggle('off', !S.sound);
@@ -455,6 +567,27 @@ $('btn-view').addEventListener('click', () => {
   const mode = Scene3D.toggleView();
   showToast(mode === 'third' ? '第三人称视角' : '第一人称视角');
   typer.focus();
+});
+
+/* ---------- 难度选择 ---------- */
+function renderDiffPicker(){
+  document.querySelectorAll('#diff-picker .diff-btn').forEach((b, i) => {
+    const locked = i === CONFIG.DIFFS.length - 1 && !hellUnlocked;
+    b.classList.toggle('active', i === S.diffIdx);
+    b.classList.toggle('locked', locked);
+    b.disabled = locked;
+    b.textContent = CONFIG.DIFFS[i].name + (locked ? ' · 未解锁' : '');
+  });
+}
+$('diff-picker').addEventListener('click', e => {
+  const b = e.target.closest('.diff-btn');
+  if (!b || b.disabled) return;
+  const i = parseInt(b.dataset.i, 10) || 0;
+  if (i === S.diffIdx) return;
+  S.diffIdx = i;
+  try{ localStorage.setItem('wd_diff', String(i)); }catch(err){}
+  renderDiffPicker();
+  refreshBest();
 });
 
 // 战绩卡下载
@@ -480,10 +613,14 @@ $('title').addEventListener('click', () => {
 
 /* ---------- 词库面板 ---------- */
 function refreshLibStatus(){
-  const {list, custom} = getWords();
+  const {list, custom, preset} = getWords();
+  const active = LIB_PRESETS[preset] || LIB_PRESETS.general;
   $('lib-status').textContent = custom
     ? `当前词库：自定义（${list.length} 词）`
-    : `当前词库：内置通用（${list.length} 词）`;
+    : `当前词库：${active.name}（${list.length} 词）`;
+  document.querySelectorAll('.lib-preset').forEach(btn => {
+    btn.classList.toggle('active', !custom && btn.dataset.preset === active.key);
+  });
 }
 $('lib-save').addEventListener('click', () => {
   const arr = parseWords($('lib-text').value);
@@ -493,8 +630,20 @@ $('lib-save').addEventListener('click', () => {
 });
 $('lib-reset').addEventListener('click', () => {
   clearWords();
+  setPreset('general');
   $('lib-text').value = '';
   refreshLibStatus();
+});
+// 内置词库：点击直接应用，无需手动粘贴
+document.querySelectorAll('.lib-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = LIB_PRESETS[btn.dataset.preset] ? btn.dataset.preset : 'general';
+    clearWords();                          // 自定义词库优先，先清空以确保内置预设生效
+    setPreset(key);
+    $('lib-text').value = '';              // 内置词库直接应用，无需手动粘贴
+    refreshLibStatus();
+    showToast('已应用 · ' + LIB_PRESETS[key].name + '（' + LIB_PRESETS[key].words.length + ' 词）');
+  });
 });
 $('lib-file').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
@@ -507,12 +656,14 @@ $('lib-file').addEventListener('change', e => {
 /* ---------- 初始化 ---------- */
 function refreshBest(){
   let best = 0;
-  try{ best = parseInt(localStorage.getItem('wd_best') || '0', 10) || 0; }catch(e){}
+  try{ best = parseInt(localStorage.getItem('wd_best_' + S.diffIdx) || '0', 10) || 0; }catch(e){}
   $('best-line').classList.toggle('hidden', best <= 0);
+  $('best-label').textContent = '历史最佳 · ' + CONFIG.DIFFS[S.diffIdx].name;
   $('best-score').textContent = best;
 }
 Scene3D.init($('game'));
 window.addEventListener('resize', () => Scene3D.resize());
+renderDiffPicker();
 refreshBest();
 refreshLibStatus();
 requestAnimationFrame(frame);

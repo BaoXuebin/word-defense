@@ -120,14 +120,19 @@ function drawCard(st){
   // 彩蛋行（有彩蛋才显示）
   if (st.eggs > 0){
     g.fillStyle = '#ffb454'; g.font = `600 26px ${SERIF}`;
-    g.fillText('✦ 发现彩蛋 × ' + st.eggs + ' ✦', 450, 1000);
+    g.fillText('✦ 发现彩蛋 × ' + st.eggs + ' ✦', 450, 995);
   }
-  // 底部
+  /* 底部：日期 + 网址 + 引流文字 */
   g.strokeStyle = 'rgba(125,135,151,.35)'; g.lineWidth = 1;
-  g.beginPath(); g.moveTo(150, 1020); g.lineTo(750, 1020); g.stroke();
+  g.beginPath(); g.moveTo(150, 1005); g.lineTo(750, 1005); g.stroke();
   g.fillStyle = '#7d8797'; g.font = `20px ${MONO}`;
-  g.fillText(new Date().toLocaleDateString('zh-CN'), 450, 1062);
-  g.fillStyle = acc; g.font = `600 24px ${SERIF}`;
-  g.fillText(CONFIG.SHOP_NAME + ' · 长按保存 来挑战我', 450, 1110);
+  g.fillText(new Date().toLocaleDateString('zh-CN'), 450, 1045);
+  g.fillStyle = acc;
+  g.shadowColor = tint(acc, .45); g.shadowBlur = 16;
+  g.font = `700 26px ${MONO}`;
+  g.fillText(String(CONFIG.SITE_URL || '').replace(/^https?:\/\//, ''), 450, 1091);
+  g.shadowBlur = 0;
+  g.fillStyle = '#7d8797'; g.font = `600 21px ${SERIF}`;
+  g.fillText(CONFIG.SHOP_NAME + ' · 长按保存 来挑战我', 450, 1136);
   $('card-preview').src = c.toDataURL('image/png');
 }

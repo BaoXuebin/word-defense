@@ -18,6 +18,7 @@
     <div><span class="hud-score" id="hud-score">0</span><span class="hud-label">得分 SCORE</span></div>
     <div id="hud-combo"></div>
     <div class="hud-right">
+      <span id="hud-goal">0 / 200</span>
       <span id="hud-time">0:00</span>
       <span id="hud-lives">♥♥♥</span>
       <button id="btn-view" title="切换视角">视角</button>
@@ -25,39 +26,52 @@
     </div>
   </div>
 
-  <div id="focus-hint" class="hidden">点 击 屏 幕 继 续 输 入</div>
+  <div id="focus-hint" class="hidden">已 暂 停 · 按 回 车 继 续</div>
   <div id="toast" class="hidden"></div>
   <div id="countdown"></div>
 
   <!-- ===== 开始屏 ===== -->
   <section id="screen-start" class="screen">
-    <div class="caps">Word Defense</div>
+    <div class="caps">Word Defense · 公元 2147</div>
     <h1 id="title">星际<em>打字</em>防线</h1>
-    <p class="tagline">陨石正砸向地球基地 · 敲下单词 · 守住最后防线</p>
-    <p class="best hidden" id="best-line">历史最佳 <b id="best-score">0</b> 分</p>
-    <button class="btn" id="btn-start">开始防御</button>
-    <p class="howto">电脑直接敲击键盘 / 手机点击屏幕唤起键盘<br>打错会断连击 · 陨石落地损失生命 ×4<br>传说连击 16 段会进入狂暴模式……</p>
+    <p class="tagline">公元 2147 年 · 一场突如其来的流星雨撕裂地月轨道<br>直扑地球而来——你是最后一位截击飞行员<br>驾驶战机迎着陨石雨出击 · 敲下单词逐字击碎它们 · 拯救地球</p>
+    <p class="best hidden" id="best-line"><span id="best-label">历史最佳</span> <b id="best-score">0</b> 分</p>
+    <div class="diff-picker" id="diff-picker">
+      <button class="diff-btn" data-i="0">简单</button>
+      <button class="diff-btn" data-i="1">中等</button>
+      <button class="diff-btn" data-i="2">终极</button>
+      <button class="diff-btn" data-i="3">地狱 · 未解锁</button>
+    </div>
+    <button class="btn" id="btn-start">升 空 迎 击</button>
+    <p class="howto">击碎当局全部陨石即拯救成功（约 3 分钟）<br>地球被撞 3 次防线崩溃 · 打错断连击 · ESC 换目标<br>回车 开始 / 继续 · 失去焦点自动暂停<br>难度越高陨雨越密 · 通关「终极」解锁「地狱」</p>
     <details>
       <summary>自定义词库 · CUSTOM</summary>
       <div class="lib-body">
         <div class="lib-status" id="lib-status"></div>
+        <div class="lib-presets">
+          <span class="lib-presets-label">内置词库 · 点击即用：</span>
+          <button class="lib-preset" type="button" data-preset="general">通用</button>
+          <button class="lib-preset" type="button" data-preset="cet4">四级核心词</button>
+          <button class="lib-preset" type="button" data-preset="cet6">六级核心词</button>
+        </div>
         <textarea id="lib-text" placeholder="把单词粘贴到这里，用空格 / 换行 / 逗号分隔，例如：&#10;apple banana cloud dragon ..."></textarea>
         <div class="lib-actions">
           <button class="btn" id="lib-save">保存并使用</button>
           <button class="btn ghost" id="lib-reset">恢复默认</button>
           <label class="lib-file">导入 .txt 词库文件<input type="file" id="lib-file" accept=".txt,.csv,text/plain" hidden></label>
         </div>
-        <p class="lib-note">附赠的四级 / 六级核心词 .txt 可直接导入。词库保存在本机浏览器，下次打开自动生效。</p>
+        <p class="lib-note">点击上方内置词库即直接应用并记忆（无需手动粘贴）；下方文本框仅在手动输入或导入 .txt 时使用，会优先于内置词库。词库保存在本机浏览器，下次打开自动生效。</p>
       </div>
     </details>
   </section>
 
   <!-- ===== 结算屏 ===== -->
   <section id="screen-over" class="screen hidden">
-    <h2>防 线 告 破</h2>
+    <h2 id="over-title">防 线 告 破</h2>
     <div class="rank" id="over-rank">太空菜鸟</div>
     <div class="record hidden" id="over-record">新 纪 录 NEW RECORD</div>
     <div class="egg-line hidden" id="over-egg">✦ 发现彩蛋 × <b id="st-egg">0</b> ✦</div>
+    <p class="over-sub" id="over-sub"></p>
     <div class="stats">
       <div class="stat"><b id="st-score">0</b><span>总分</span></div>
       <div class="stat"><b id="st-kill">0</b><span>击毁</span></div>
@@ -81,6 +95,19 @@
 <!-- 经典 script 标签按序加载，保证 file:// 双击直开（ES module 在 file:// 下会被浏览器拦截） -->
 <script src="js/vendor/three.min.js"></script>
 <script src="js/config.js"></script>
+<script>
+/* Google Analytics：在 config.js 填入 GA_ID 才会加载（离线 / 未配置时静默跳过） */
+if (window.CONFIG && CONFIG.GA_ID){
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function(){ dataLayer.push(arguments); };
+  gtag('js', new Date());
+  gtag('config', CONFIG.GA_ID);
+  var gaScript = document.createElement('script');
+  gaScript.async = true;
+  gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(CONFIG.GA_ID);
+  document.head.appendChild(gaScript);
+}
+</script>
 <script src="js/earth-texture.js"></script>
 <script src="js/ship-texture.js"></script>
 <script src="js/words.js"></script>

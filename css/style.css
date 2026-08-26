@@ -48,6 +48,7 @@ body.overdrive #vignette{animation:odPulse .9s ease-in-out infinite}
 #hud-combo{font-size:15px;color:var(--amber);text-shadow:0 0 12px rgba(255,180,84,.5);letter-spacing:.1em;min-height:20px}
 #hud-combo.flash{animation:pulse .5s ease-in-out infinite}
 .hud-right{display:flex;align-items:center;gap:14px;font-size:14px;color:var(--dim)}
+#hud-goal{color:var(--cyan);font-size:13px;letter-spacing:.06em;font-variant-numeric:tabular-nums}
 #hud-lives{color:var(--red);letter-spacing:.15em;font-size:15px}
 #hud-time{font-variant-numeric:tabular-nums}
 #btn-sound,#btn-view{
@@ -158,6 +159,17 @@ h1 em{font-style:normal;color:var(--cyan)}
 .tagline{margin-top:16px;color:var(--dim);font-size:13px;letter-spacing:.25em;line-height:2}
 .best{margin-top:22px;font-size:13px;color:var(--amber);letter-spacing:.15em}
 
+/* 难度选择 */
+.diff-picker{margin-top:26px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.diff-btn{
+  cursor:pointer;font-family:var(--mono);font-size:13px;letter-spacing:.15em;
+  color:var(--dim);background:none;border:1px solid rgba(125,135,151,.4);
+  padding:10px 18px;border-radius:4px;transition:all .2s;
+}
+.diff-btn:hover{color:var(--ink);border-color:rgba(223,230,243,.6)}
+.diff-btn.active{color:var(--cyan);border-color:var(--cyan);background:rgba(83,245,255,.08);box-shadow:0 0 14px rgba(83,245,255,.25)}
+.diff-btn.locked{opacity:.45;cursor:not-allowed}
+
 .btn{
   margin-top:30px;padding:16px 54px;cursor:pointer;
   font-family:var(--mono);font-size:16px;letter-spacing:.4em;text-indent:.4em;color:var(--cyan);
@@ -184,6 +196,16 @@ summary{
 summary::-webkit-details-marker{display:none}
 .lib-body{margin-top:12px;padding:16px;border:1px solid rgba(125,135,151,.2);border-radius:6px;background:var(--panel)}
 .lib-status{font-size:12px;color:var(--amber);letter-spacing:.1em;margin-bottom:10px}
+.lib-presets{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.lib-presets-label{font-size:12px;color:var(--dim);letter-spacing:.1em}
+.lib-preset{
+  padding:6px 12px;font-size:12px;letter-spacing:.08em;cursor:pointer;
+  background:rgba(10,14,26,.6);color:var(--dim);
+  border:1px solid rgba(125,135,151,.3);border-radius:4px;
+  transition:color .15s,border-color .15s,background .15s;
+}
+.lib-preset:hover{color:var(--ink);border-color:rgba(125,135,151,.55)}
+.lib-preset.active{color:var(--amber);border-color:var(--amber);background:rgba(255,180,84,.08)}
 #lib-text{
   width:100%;height:110px;resize:vertical;padding:10px;
   background:rgba(10,14,26,.8);color:var(--ink);border:1px solid rgba(125,135,151,.3);border-radius:4px;
@@ -196,6 +218,8 @@ summary::-webkit-details-marker{display:none}
 
 /* ===== 结算屏 ===== */
 h2{font-family:var(--serif);font-size:clamp(30px,7vw,46px);letter-spacing:.12em;color:var(--red);text-shadow:0 0 26px rgba(255,93,93,.35)}
+h2.win{color:#8affc1;text-shadow:0 0 28px rgba(138,255,193,.45)}
+.over-sub{margin-top:12px;color:var(--dim);font-size:13px;letter-spacing:.15em;line-height:1.9}
 .rank{
   margin-top:14px;font-family:var(--serif);font-size:clamp(26px,6vw,38px);
   color:var(--amber);text-shadow:0 0 22px rgba(255,180,84,.4);letter-spacing:.15em;
